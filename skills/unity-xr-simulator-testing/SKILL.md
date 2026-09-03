@@ -208,12 +208,37 @@ Installing Monado on Linux does not help Unity. Unity talks to OpenXR through
 connect to the runtime. Monado is useful for engines with native Linux OpenXR
 support; Unity is not currently one of them.
 
-## Configuring a real device target you cannot build
+## Building for a real device from headless Linux
 
-Configuration and building are separate concerns, and it is worth splitting them
-into separate entry points (`ConfigureQuest` / `BuildQuestApk`). The
-configuration then still runs, and can be reviewed and committed, on a machine
-that has no Android module. Four traps:
+**First: check whether you actually cannot build, rather than assuming.** Unity's
+release metadata lists the Android (and iOS) target for the *Linux* editor as a
+macOS `.pkg`, which looks like Linux is unsupported. It is not. A `.pkg` is an
+xar archive, and Unity Hub only extracts its payload into
+`Editor/Data/PlaybackEngines/AndroidPlayer`. Every sub-component is a real
+linux-x64 build — the NDK toolchain is literally `prebuilt/linux-x86_64`.
+
+So a headless Linux machine with no Hub can still install the module and build a
+Quest APK. Drive it from Unity's own metadata:
+
+```
+https://services.api.unity.com/unity/editor/release/v1/releases?version=<VERSION>
+```
+
+Walk `downloads[platform=LINUX].modules[id=android]` and its nested
+`subModules`, honouring each node's `destination` and `extractedPathRename`.
+Extraction is `7z` (xar) → `Payload` → `gzip` → `cpio`; note that some 7z
+versions already decompress the gzip layer and leave `Payload~`, so handle both.
+This also yields `adb`, at `.../AndroidPlayer/SDK/platform-tools/adb`.
+
+Two traps in the renames: the destination is often the *parent* of the source
+(extract into `NDK/`, then collapse `NDK/android-ndk-r27c` up into `NDK`), so
+clearing the destination first deletes what you are about to move — stage
+through a temp directory. And verify afterwards that the binaries are executable
+and actually run (`adb version`, `java -version`).
+
+Still split configuration from building (`ConfigureQuest` / `BuildQuestApk`), so
+configuration can be applied and reviewed on a machine that genuinely lacks the
+module. Four traps:
 
 - **Unity only materialises XR settings for *installed* build targets.**
   `OpenXRSettings.GetSettingsForBuildTargetGroup(BuildTargetGroup.Android)`
@@ -233,8 +258,54 @@ that has no Android module. Four traps:
   Force `MultiPass` if your shaders lack an instancing-aware path, and re-check
   it after any settings regeneration.
 
-Be honest in the docs about what was never run. A build script that has only
-ever exercised its own failure path is *configured*, not *verified*.
+### Unity misreports build failures as compiler errors
+
+`Aborting batchmode due to failure: Scripts have compiler errors` is Unity's
+catch-all. It is frequently not a code error at all. Grep the log for the real
+cause before touching any code:
+
+- `Out of memory` — Unity leaves Roslyn `VBCSCompiler` servers running between
+  builds, and they can hold several GB each. Kill the idle ones.
+- `pthread_create failed (EAGAIN)` / `posix_spawn failed` / `Resource
+  temporarily unavailable` — process-limit exhaustion, not memory. Gradle
+  defaults to a resident daemon and one worker per core; on a constrained
+  cgroup that alone breaks the build. Force it serial via
+  `Assets/Plugins/Android/gradleTemplate.properties`:
+  ```properties
+  org.gradle.parallel=false
+  org.gradle.daemon=false
+  org.gradle.workers.max=2
+  ```
+  and lower `BEE_BUILD_THREADS`. Compare `/proc/<pid>/cgroup` against
+  `/proc/self/cgroup` before blaming a process for your pid budget — processes
+  in another cgroup never counted against it.
+- `The name 'Permission' does not exist in the current context` — the built-in
+  **Android JNI** module is disabled. Add `com.unity.modules.androidjni` to
+  `Packages/manifest.json`.
+
+Have your build script detect these and print the remedy; otherwise you will
+debug imaginary compiler errors.
+
+### Verify the artifact, not just the exit code
+
+A "Succeeded" result is weak evidence. Inspect the APK:
+
+```bash
+aapt2 dump badging app.apk      # package, minSdk, native-code, uses-feature
+aapt2 dump xmltree app.apk --file AndroidManifest.xml
+apksigner verify --verbose app.apk
+unzip -l app.apk | grep '\.so$'
+```
+
+For a Quest build expect `arm64-v8a`, `libopenxr_loader.so`,
+`com.oculus.intent.category.VR`, `android.hardware.vr.headtracking`, and
+`com.oculus.supportedDevices` containing your target (Quest 3 is `eureka`).
+Also confirm your compute kernels actually shipped, e.g.
+`strings assets/bin/Data/sharedassets0.assets.split* | grep <KernelName>`.
+
+Be honest about what was never run. A structurally verified APK that has never
+been on a headset is *built*, not *proven*: frame rate and runtime behaviour are
+still unknown.
 
 ## Checklist
 

@@ -130,6 +130,32 @@ this without hardware.
 
 Splats are sorted per view. Two eyes means two sorts, so budget for it.
 
+## The sorter fails loudly on devices without compute support
+
+Splat rendering needs a GPU radix sort, and the sorter is constructed in
+`OnEnable`. `ComputeShader.FindKernel` **throws** an `ArgumentException` when a
+kernel has no compiled variant for the current device, rather than returning
+`-1` — so the usual `kernelIndex >= 0` validity guard never actually runs:
+
+```csharp
+// Throws, defeating the m_Valid check below it.
+m_kernelInitDeviceRadixSort = cs.FindKernel("InitDeviceRadixSort");
+
+// Non-throwing; lets the component degrade instead of exploding.
+static int FindKernelOrMinusOne(ComputeShader cs, string name)
+    => cs.HasKernel(name) ? cs.FindKernel(name) : -1;
+```
+
+This bites hardest during **headless player builds**: Unity opens the scene, the
+renderer's `OnEnable` runs with no GPU under `-nographics`, and every build logs
+a spurious `Kernel 'InitDeviceRadixSort' not found` exception that looks like a
+shader authoring failure. It is not — the kernel ships fine. Confirm by grepping
+the built assets for the kernel name.
+
+After making the sorter fail soft, re-run a **GPU** render test. Silently
+disabling sorting still produces a plausible-looking image, so a fix that only
+suppresses the exception can hide a real regression in blend order.
+
 ## Verifying the pipeline
 
 Splats have no geometry to inspect, so assert on rendered pixels. Generate a
