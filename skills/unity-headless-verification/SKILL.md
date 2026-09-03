@@ -96,6 +96,37 @@ Other tools inherit the same limit. A Go binary such as `gh` will crash with
 `newosproc ... errno=11` while a Unity build is running; that is the same
 exhaustion, not a broken install.
 
+### A wedged UnityLinker does not recover
+
+If the budget is exhausted at the moment `UnityLinker` starts, it spawns but
+deadlocks at 0% CPU, and bee waits on it indefinitely. The build sits at
+`[BUSY 1518s] UnityLinker` looking like a slow link rather than a hang.
+
+Two things make this hard to diagnose:
+
+- **Freeing pids afterwards does not unstick it.** The linker is already wedged.
+  You must kill the build and restart it once there is headroom.
+- **Processes in other cgroups are irrelevant, however old they look.** A pile of
+  three-week-old `MSBuild.dll` nodes from another login session is a red herring
+  if they live in `user.slice`. Compare cgroups before blaming them:
+
+```bash
+cat /proc/self/cgroup
+cat /proc/<suspect-pid>/cgroup
+```
+
+Attribute usage properly, by thread count, within your own cgroup:
+
+```bash
+C=/sys/fs/cgroup/<your-scope>
+for p in $(cat $C/cgroup.procs); do
+  echo "$(awk '/^Threads:/{print $2}' /proc/$p/status 2>/dev/null) $p $(cat /proc/$p/comm 2>/dev/null)"
+done | sort -rn | head
+```
+
+Idle `UnityShaderComp` workers are usually the largest reclaimable block, at
+around 12 threads each; Unity respawns them on demand.
+
 ## Writing a probe that actually catches regressions
 
 A probe is only worth having if it fails when the picture is wrong. Weak

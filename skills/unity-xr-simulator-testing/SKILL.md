@@ -181,6 +181,26 @@ xvfb-run -a --server-args="-screen 0 1280x1024x24" \
 
 Have the player write its report to a path you pass in, then read the exit code.
 
+### This works — verified numbers
+
+A Unity 6 URP project rendering a 115k-splat Gaussian cloud, built for Windows
+x64 and run under Wine 9.0 on a headless Linux box with an NVIDIA GTX 1650:
+
+```
+device=NVIDIA GeForce GTX 1650   api=Vulkan (through winevulkan)
+xr.active_loader=MockHMDLoader   xr.enabled=True
+xr.device=Mock HMD Display       xr.stereo_mode=MultiPass
+xr.eye_width=1512                xr.eye_height=1680
+cam.stereo_enabled=True
+left.coverage=0.690              right.coverage=0.679
+stereo.eye_chroma_delta=0.0069   stereo.parallax_pixel_fraction=0.2531
+RESULT=PASS
+```
+
+The captured eyes show the expected circular lens viewport, and their difference
+map shows structured, depth-dependent disparity rather than noise. No headset,
+no Android SDK, no device.
+
 ## A word on Monado and other host OpenXR runtimes
 
 Installing Monado on Linux does not help Unity. Unity talks to OpenXR through
