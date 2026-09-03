@@ -208,6 +208,34 @@ Installing Monado on Linux does not help Unity. Unity talks to OpenXR through
 connect to the runtime. Monado is useful for engines with native Linux OpenXR
 support; Unity is not currently one of them.
 
+## Configuring a real device target you cannot build
+
+Configuration and building are separate concerns, and it is worth splitting them
+into separate entry points (`ConfigureQuest` / `BuildQuestApk`). The
+configuration then still runs, and can be reviewed and committed, on a machine
+that has no Android module. Four traps:
+
+- **Unity only materialises XR settings for *installed* build targets.**
+  `OpenXRSettings.GetSettingsForBuildTargetGroup(BuildTargetGroup.Android)`
+  returns `null`, and `FeatureHelpers.GetFeatureWithIdForBuildTarget` finds
+  nothing, when Android Build Support is missing. Detect this with
+  `BuildPipeline.IsBuildTargetSupported` and **warn loudly**, rather than letting
+  the run look successful while silently configuring nothing.
+- **Switch the active build target before configuring**, for the same reason:
+  ```csharp
+  if (EditorUserBuildSettings.activeBuildTarget != BuildTarget.Android)
+      EditorUserBuildSettings.SwitchActiveBuildTarget(NamedBuildTarget.Android, BuildTarget.Android);
+  ```
+- **`PlayerSettings.colorSpace` is global, not per-platform.** Setting it for a
+  headset target changes desktop rendering too — which will move the colours your
+  render probe reads back. Expect to fix the probe in the same change.
+- **OpenXR defaults to `SinglePassInstanced`** (`OpenXRSettings.RenderMode`).
+  Force `MultiPass` if your shaders lack an instancing-aware path, and re-check
+  it after any settings regeneration.
+
+Be honest in the docs about what was never run. A build script that has only
+ever exercised its own failure path is *configured*, not *verified*.
+
 ## Checklist
 
 - [ ] Confirmed the provider ships native plugins for the target platform

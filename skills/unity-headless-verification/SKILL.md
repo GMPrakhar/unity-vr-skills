@@ -160,17 +160,44 @@ if (NearestPaletteKey(centre) != view.expect || ChromaDistance(want, centre) > 0
 
 ### Watch out for colour space
 
-In linear colour space, `ReadPixels` from a non-sRGB render target gives you
-**linear** values while your reference colours are almost certainly authored in
-sRGB. Comparing them directly makes everything fail by roughly a 2.2 gamma.
-`0.42` sRGB reads back as `0.15`. Convert the references once:
+Reference colours are almost certainly authored in sRGB, but what `ReadPixels`
+hands back depends on the **project colour space and the render target format**.
+Guess wrong and every channel of every view is off by roughly a 2.2 gamma:
+`0.42` sRGB is `0.15` linear.
+
+- **Gamma colour space**, or a non-sRGB render target: no conversion happens on
+  write, so you read back raw linear shader output. Convert your references
+  *to* linear before comparing.
+- **Linear colour space** with a default (sRGB) render target: Unity converts on
+  write, so you read back sRGB. Compare against your references *as authored*.
+
+Do not hard-code either one. Derive it, so the probe survives someone flipping
+the project colour space — which is a **global** setting, not per-platform, so a
+platform build script can change it under you:
 
 ```csharp
+static Dictionary<string, Color> BuildPalette()
+{
+    if (QualitySettings.activeColorSpace == ColorSpace.Linear)
+        return new Dictionary<string, Color>(kPaletteSrgb);   // read back as sRGB
+
+    var d = new Dictionary<string, Color>();
+    foreach (var kv in kPaletteSrgb)
+        d[kv.Key] = new Color(SrgbToLinear(kv.Value.r),
+                              SrgbToLinear(kv.Value.g),
+                              SrgbToLinear(kv.Value.b));
+    return d;
+}
+
 static float SrgbToLinear(float c) =>
     c <= 0.04045f ? c / 12.92f : Mathf.Pow((c + 0.055f) / 1.055f, 2.4f);
 ```
 
-If every channel of every view is off by a consistent power, this is why.
+Report the active colour space in the probe output. If every channel of every
+view is off by a consistent power, this is why. This exact bug was caught twice
+on the same project: once when the palette was compared unconverted, and again
+when a Quest build script set the project to Linear and silently inverted the
+correct answer.
 
 ### Keep a coverage guard
 
