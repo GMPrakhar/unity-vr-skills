@@ -16,6 +16,7 @@ get that working, not a summary of documentation.
 | [`unity-xr-simulator-testing`](skills/unity-xr-simulator-testing/) | VR stereo must be verified without a headset — Mock HMD, built-player probes, Windows-under-Wine |
 | [`gaussian-splat-runtime`](skills/gaussian-splat-runtime/) | Players supply their own 3D scans and splats must load at runtime, not via the editor importer |
 | [`scan-to-level`](skills/scan-to-level/) | A real-world scan needs to become playable: floor, walkable area, spawns, movement without colliders |
+| [`scan-navigation-ai`](skills/scan-navigation-ai/) | Agents must path and hunt inside a scanned space without walking through walls |
 
 ## Why this exists
 
