@@ -17,6 +17,7 @@ get that working, not a summary of documentation.
 | [`gaussian-splat-runtime`](skills/gaussian-splat-runtime/) | Players supply their own 3D scans and splats must load at runtime, not via the editor importer |
 | [`scan-to-level`](skills/scan-to-level/) | A real-world scan needs to become playable: floor, walkable area, spawns, movement without colliders |
 | [`scan-navigation-ai`](skills/scan-navigation-ai/) | Agents must path and hunt inside a scanned space without walking through walls |
+| [`map-space-by-walking`](skills/map-space-by-walking/) | The player should map their own room from inside the app, instead of sideloading a scan from somewhere else |
 
 ## Why this exists
 
